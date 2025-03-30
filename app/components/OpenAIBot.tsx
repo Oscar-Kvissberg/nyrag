@@ -2,58 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-const EXAMPLE_EMAILS = [
-    {
-        label: "Medlemskap & Förmåner",
-        text: `Hej,
+interface ExampleEmail {
+    label: string;
+    text: string;
+}
 
-Jag har en fråga kring era medlemskap. Om jag skulle teckna ett Park-medlemskap och ibland vilja spela på TC-banan, är det möjligt att göra det och finns det någon rabatt för Park-medlemmar i sådana fall? Jag är även nyfiken på hur medlemslånen fungerar för TC och Classic-medlemskap. Är det några specifika villkor jag bör känna till?
-
-Tack på förhand för hjälpen!
-
-Vänliga hälsningar,
-Mohamed Salah`
-    },
-    {
-        label: "Banstatus & Greenfee",
-        text: `Hej,
-
-Jag har ett par frågor angående era banor. Jag såg att Classic Course är under hålpipning och erbjuder reducerad greenfee under läktiden. Hur ofta uppdateras banstatusen på hemsidan, och vad händer om jag bokar en tid och det visar sig vara frost eller banan fortfarande läker?
-
-Jag skulle även vilja veta hur reducerad greenfee fungerar rent praktiskt om man redan har ett medlemskap.
-
-Tack för informationen!
-
-Med vänlig hälsning,
-Trent Alexander-Arnold`
-    },
-    {
-        label: "Restaurang & Betalning",
-        text: `Hej,
-
-Jag har en fråga kring Vasatorpskortet och era kiosker. Om man glömmer sitt Vasatorpskort hemma, går det att koppla det till en app eller någon annan lösning för att ändå kunna få rabatt när man handlar i kiosken eller restaurangen?
-
-Dessutom undrar jag om det är möjligt att boka bord i restaurangen i förväg, eller om det är först till kvarn som gäller? Vart bokar man detta isåfall?
-
-Tack på förhand!
-
-Vänliga hälsningar,
-Andy Robertson`
-    },
-    {
-        label: "Träning & Driving Range",
-        text: `Hej,
-
-Jag undrar lite kring era träningsmöjligheter. Hur ofta har jag som vanlig medlem möjlighet att använda Trackman Range, och finns det några begränsningar för när man kan träna där?
-
-Jag har även sett att det erbjuds rabatter på Driving Range under sportlovsveckan. Om jag har ett saldo på GolfMore-appen, gäller rabatten automatiskt när jag köper bollar, eller behöver jag göra något särskilt för att aktivera den?
-
-Tack för hjälpen!
-
-Med vänlig hälsning,
-Virgil van Dijk`
-    }
-];
+interface User {
+    username: string;
+    clubId: string;
+    role: string;
+}
 
 export default function OpenAIBot() {
     const [message, setMessage] = useState('');
@@ -62,14 +20,47 @@ export default function OpenAIBot() {
     const [error, setError] = useState<string | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
     const [textareaHeight, setTextareaHeight] = useState('300px');
+    const [exampleEmails, setExampleEmails] = useState<ExampleEmail[]>([]);
     const responseTextareaRef = useRef<HTMLTextAreaElement>(null);
     const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
     const selectRef = useRef<HTMLSelectElement>(null);
-    const [responseId, setResponseId] = useState<string | null>(null);
     const [feedbackSent, setFeedbackSent] = useState(false);
+    const [user, setUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        // Get user from localStorage
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            setUser(JSON.parse(userStr));
+        }
+    }, []);
+
+    useEffect(() => {
+        // Fetch example emails when user is available
+        const fetchExampleEmails = async () => {
+            if (!user?.clubId) return;
+
+            try {
+                const response = await fetch(`/api/example-questions?clubId=${user.clubId}`);
+                const data = await response.json();
+                
+                if (data.examples) {
+                    const formattedExamples = data.examples.map((ex: { label: string; text: string }) => ({
+                        label: ex.label,
+                        text: ex.text
+                    }));
+                    setExampleEmails(formattedExamples);
+                }
+            } catch (err) {
+                console.error('Error fetching example emails:', err);
+            }
+        };
+
+        fetchExampleEmails();
+    }, [user?.clubId]);
 
     const handleExampleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedExample = EXAMPLE_EMAILS.find(email => email.label === e.target.value);
+        const selectedExample = exampleEmails.find(email => email.label === e.target.value);
         if (selectedExample) {
             setMessage(selectedExample.text);
         }
@@ -136,7 +127,6 @@ export default function OpenAIBot() {
             }
 
             setResponse(data.response);
-            setResponseId(data.id);
 
         } catch (err) {
             console.error('Error details:', err);
@@ -157,18 +147,23 @@ export default function OpenAIBot() {
     };
 
     const handleFeedback = async (quality: 'good' | 'bad', feedback?: string) => {
-        if (!responseId || feedbackSent) return;
+        if (feedbackSent) return;
 
         try {
-            const res = await fetch('/api/email-examples', {
-                method: 'PUT',
+            const res = await fetch('/api/statistics', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    id: responseId,
-                    quality,
-                    feedback
+                    clubId: 'default',
+                    interactionType: 'feedback',
+                    question: message,
+                    answer: response,
+                    feedback: quality,
+                    feedbackText: feedback,
+                    responseTimeMs: 0,
+                    tokensUsed: 0
                 }),
             });
 
@@ -202,7 +197,7 @@ export default function OpenAIBot() {
                                 defaultValue=""
                             >
                                 <option value="" disabled>Exempel</option>
-                                {EXAMPLE_EMAILS.map((email, index) => (
+                                {exampleEmails.map((email, index) => (
                                     <option key={index} value={email.label}>
                                         {email.label}
                                     </option>

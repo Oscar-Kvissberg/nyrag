@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { AzureKeyCredential, SearchClient } from '@azure/search-documents';
 
-interface SearchDocument {
+interface EmailExample {
   chunk_id: string;
-  title: string;
-  content: string;
+  question: string;
+  answer: string;
+  club_id: string;
 }
 
 const searchClient = new SearchClient(
@@ -13,45 +14,65 @@ const searchClient = new SearchClient(
   new AzureKeyCredential(process.env.AZURE_SEARCH_KEY || '')
 );
 
-// Get all email examples
-export async function GET() {
+// Get all email examples for a specific club
+export async function GET(req: Request) {
   try {
-    console.log('Fetching email examples...');
+    const { searchParams } = new URL(req.url);
+    const clubId = searchParams.get('clubId');
+
+    if (!clubId) {
+      return NextResponse.json(
+        { error: 'clubId is required' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Fetching email examples for club:', clubId);
     const results = await searchClient.search('*', {
-      filter: "title eq 'email'",
-      select: ['title', 'content'],
+      filter: `club_id eq '${clubId}' and type eq 'email_example'`,
+      select: ['question', 'answer'],
       top: 100
     });
 
     const examples = [];
     for await (const result of results.results) {
-      const doc = result.document as SearchDocument;
-      console.log('Found document:', doc);
-      // Split content into question and answer
-      const [question, answer] = doc.content.split('\n\n');
-      examples.push({ question, answer });
+      const example = result.document as EmailExample;
+      examples.push({
+        question: example.question,
+        answer: example.answer
+      });
     }
 
-    console.log('Found examples:', examples);
+    console.log('Found examples:', examples.length);
     return NextResponse.json({ examples });
   } catch (error) {
-    console.error('Error fetching examples:', error);
+    console.error('Error fetching email examples:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch examples' },
+      { error: 'Failed to fetch email examples' },
       { status: 500 }
     );
   }
 }
 
-// Update email examples
+// Update email examples for a specific club
 export async function POST(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const clubId = searchParams.get('clubId');
     const newExamples = await req.json();
-    console.log('Received new examples:', newExamples);
+
+    if (!clubId) {
+      return NextResponse.json(
+        { error: 'clubId is required' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Received new examples for club:', clubId);
     
     // Validate the data structure
-    if (!Array.isArray(newExamples) || !newExamples.every(email => 
-      typeof email.question === 'string' && typeof email.answer === 'string'
+    if (!Array.isArray(newExamples) || !newExamples.every(example => 
+      typeof example.question === 'string' && typeof example.answer === 'string'
     )) {
       return NextResponse.json(
         { error: 'Ogiltig datastruktur. Varje exempel måste ha question och answer.' },
@@ -59,35 +80,37 @@ export async function POST(req: Request) {
       );
     }
 
-    // First, delete all existing email examples
+    // First, delete all existing email examples for this club
     console.log('Deleting existing examples...');
     const deleteResults = await searchClient.search('*', {
-      filter: "title eq 'email'",
+      filter: `club_id eq '${clubId}' and type eq 'email_example'`,
       select: ['chunk_id'],
       top: 100
     });
 
-    const existingDocs = [];
+    const existingExamples = [];
     for await (const result of deleteResults.results) {
-      const doc = result.document as SearchDocument;
-      existingDocs.push({ chunk_id: doc.chunk_id });
+      const example = result.document as EmailExample;
+      existingExamples.push({ chunk_id: example.chunk_id });
     }
 
-    if (existingDocs.length > 0) {
-      console.log('Found existing docs to delete:', existingDocs);
-      await searchClient.deleteDocuments(existingDocs);
+    if (existingExamples.length > 0) {
+      console.log('Found existing examples to delete:', existingExamples);
+      await searchClient.deleteDocuments(existingExamples);
     }
 
     // Then upload the new examples
     console.log('Uploading new examples...');
-    const documents = newExamples.map((example, index) => ({
-      chunk_id: `email-${index}`,
-      title: 'email',
-      content: `${example.question}\n\n${example.answer}`
+    const examples = newExamples.map((example, index) => ({
+      chunk_id: `${clubId}-email-${index}`,
+      question: example.question,
+      answer: example.answer,
+      club_id: clubId,
+      type: 'email_example'
     }));
 
-    console.log('Documents to upload:', documents);
-    const uploadResult = await searchClient.uploadDocuments(documents);
+    console.log('Examples to upload:', examples);
+    const uploadResult = await searchClient.uploadDocuments(examples);
     console.log('Upload result:', uploadResult);
     
     return NextResponse.json({ 
@@ -95,9 +118,9 @@ export async function POST(req: Request) {
       examples: newExamples 
     });
   } catch (error) {
-    console.error('Error saving examples:', error);
+    console.error('Error saving email examples:', error);
     return NextResponse.json(
-      { error: 'Failed to save examples' },
+      { error: 'Failed to save email examples' },
       { status: 500 }
     );
   }

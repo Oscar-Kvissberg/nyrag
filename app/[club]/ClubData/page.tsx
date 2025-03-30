@@ -4,57 +4,84 @@ import { useState, useEffect, use } from 'react';
 import React from 'react';
 
 interface Document {
+  id: number;
   title: string;
   content: string;
 }
 
 interface EmailExample {
+  id: number;
   question: string;
   answer: string;
 }
 
-interface SearchResponse {
-  documents?: {
-    documents: Array<{
-      title: string;
-      content: string;
-    }>;
-  };
-  examples?: EmailExample[];
+interface ExampleQuestion {
+  id: number;
+  label: string;
+  text: string;
+}
+
+interface User {
+  username: string;
+  clubId: string;
+  role: string;
 }
 
 export default function ClubDataPage({ params }: { params: Promise<{ club: string }> }) {
   const resolvedParams = use(params);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [emailExamples, setEmailExamples] = useState<EmailExample[]>([]);
+  const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jsonData, setJsonData] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const [activeTab, setActiveTab] = useState<'documents' | 'emails'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'emails' | 'examples'>('documents');
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    // Fetch documents from search index
+    // Get user from localStorage
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      setUser(JSON.parse(userStr));
+    }
+  }, []);
+
+  useEffect(() => {
+    // Fetch data from database
     const fetchData = async () => {
+      if (!user?.clubId) return;
+
       try {
         // Fetch documents
-        const docsResponse = await fetch('/api/search-index');
-        const docsData = await docsResponse.json() as SearchResponse;
-        if (docsData.documents?.documents) {
-          const simpleDocs = docsData.documents.documents.map(doc => ({
-            title: doc.title,
-            content: doc.content
-          }));
-          setDocuments(simpleDocs);
+        const docsResponse = await fetch(`/api/documents?clubId=${user.clubId}`);
+        const docsData = await docsResponse.json();
+        if (docsData.documents) {
+          // Remove IDs from documents
+          const docsWithoutIds = docsData.documents.map(({ title, content }: Document) => ({ title, content }));
+          setDocuments(docsData.documents);
+          setJsonData(JSON.stringify(docsWithoutIds, null, 2));
         }
 
-        // Fetch email examples
-        const emailsResponse = await fetch('/api/email-examples');
-        const emailsData = await emailsResponse.json() as SearchResponse;
-        if (emailsData.examples) {
-          setEmailExamples(emailsData.examples);
-          setJsonData(JSON.stringify(emailsData.examples, null, 2));
+        // Fetch Q&A
+        const qaResponse = await fetch(`/api/qa?clubId=${user.clubId}`);
+        const qaData = await qaResponse.json();
+        if (qaData.examples) {
+          // Remove IDs from examples
+          const qaWithoutIds = qaData.examples.map(({ question, answer }: EmailExample) => ({ question, answer }));
+          setEmailExamples(qaData.examples);
+          setJsonData(JSON.stringify(qaWithoutIds, null, 2));
+        }
+
+        // Fetch example questions
+        const examplesResponse = await fetch(`/api/example-questions?clubId=${user.clubId}`);
+        const examplesData = await examplesResponse.json();
+        if (examplesData.examples) {
+          // Remove IDs from examples
+          const examplesWithoutIds = examplesData.examples.map(({ label, text }: ExampleQuestion) => ({ label, text }));
+          setExampleQuestions(examplesData.examples);
+          setJsonData(JSON.stringify(examplesWithoutIds, null, 2));
         }
       } catch (err) {
         setError('Failed to fetch data');
@@ -64,9 +91,11 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
 
     fetchData();
     setLoading(false);
-  }, []);
+  }, [user?.clubId]);
 
   const handleSave = async () => {
+    if (!user?.clubId) return;
+
     try {
       setSaveStatus('saving');
       const parsedData = JSON.parse(jsonData);
@@ -78,17 +107,25 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
         )) {
           throw new Error('Ogiltig dokumentstruktur. Varje dokument måste ha title och content.');
         }
-      } else {
-        if (!Array.isArray(parsedData) || !parsedData.every(email => 
-          typeof email.question === 'string' && typeof email.answer === 'string'
+      } else if (activeTab === 'emails') {
+        if (!Array.isArray(parsedData) || !parsedData.every(qa => 
+          typeof qa.question === 'string' && typeof qa.answer === 'string'
         )) {
           throw new Error('Ogiltig mejlstruktur. Varje mejl måste ha question och answer.');
+        }
+      } else {
+        if (!Array.isArray(parsedData) || !parsedData.every(ex => 
+          typeof ex.label === 'string' && typeof ex.text === 'string'
+        )) {
+          throw new Error('Ogiltig exempelstruktur. Varje exempel måste ha label och text.');
         }
       }
 
       // Update data based on active tab
-      const endpoint = activeTab === 'documents' ? '/api/search-index' : '/api/email-examples';
-      const response = await fetch(endpoint, {
+      const endpoint = activeTab === 'documents' ? '/api/documents' : 
+                      activeTab === 'emails' ? '/api/qa' : '/api/example-questions';
+      
+      const response = await fetch(`${endpoint}?clubId=${user.clubId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,17 +141,16 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
       setIsEditing(false);
       
       // Refresh the data
-      const refreshResponse = await fetch(endpoint);
-      const refreshData = await refreshResponse.json() as SearchResponse;
-      if (activeTab === 'documents' && refreshData.documents?.documents) {
-        const simpleDocs = refreshData.documents.documents.map(doc => ({
-          title: doc.title,
-          content: doc.content
-        }));
-        setDocuments(simpleDocs);
-        setJsonData(JSON.stringify(simpleDocs, null, 2));
+      const refreshResponse = await fetch(`${endpoint}?clubId=${user.clubId}`);
+      const refreshData = await refreshResponse.json();
+      if (activeTab === 'documents' && refreshData.documents) {
+        setDocuments(refreshData.documents);
+        setJsonData(JSON.stringify(refreshData.documents, null, 2));
       } else if (activeTab === 'emails' && refreshData.examples) {
         setEmailExamples(refreshData.examples);
+        setJsonData(JSON.stringify(refreshData.examples, null, 2));
+      } else if (activeTab === 'examples' && refreshData.examples) {
+        setExampleQuestions(refreshData.examples);
         setJsonData(JSON.stringify(refreshData.examples, null, 2));
       }
     } catch (err) {
@@ -126,6 +162,7 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (error) return <div className="p-8 text-red-500">{error}</div>;
+  if (!user?.clubId) return <div className="p-8">Du måste vara inloggad för att se denna sida.</div>;
 
   return (
     <div className="p-8">
@@ -172,7 +209,9 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
         <button
           onClick={() => {
             setActiveTab('documents');
-            setJsonData(JSON.stringify(documents, null, 2));
+            // Remove IDs when switching to documents tab
+            const docsWithoutIds = documents.map(({ title, content }: Document) => ({ title, content }));
+            setJsonData(JSON.stringify(docsWithoutIds, null, 2));
           }}
           className={`px-4 py-2 rounded-lg font-semibold ${
             activeTab === 'documents'
@@ -185,7 +224,9 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
         <button
           onClick={() => {
             setActiveTab('emails');
-            setJsonData(JSON.stringify(emailExamples, null, 2));
+            // Remove IDs when switching to emails tab
+            const qaWithoutIds = emailExamples.map(({ question, answer }: EmailExample) => ({ question, answer }));
+            setJsonData(JSON.stringify(qaWithoutIds, null, 2));
           }}
           className={`px-4 py-2 rounded-lg font-semibold ${
             activeTab === 'emails'
@@ -194,6 +235,21 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
           }`}
         >
           Frågor & Svar
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('examples');
+            // Remove IDs when switching to examples tab
+            const examplesWithoutIds = exampleQuestions.map(({ label, text }: ExampleQuestion) => ({ label, text }));
+            setJsonData(JSON.stringify(examplesWithoutIds, null, 2));
+          }}
+          className={`px-4 py-2 rounded-lg font-semibold ${
+            activeTab === 'examples'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 hover:bg-gray-300'
+          }`}
+        >
+          Exempelfrågor
         </button>
       </div>
 
@@ -209,6 +265,12 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
   {
     "question": "Måste jag boka plats på Trackman Range?",
     "answer": "Nej det behöver du inte. Det är first-come-first-serve. Användandet av Trackman Range ingår i bollpriset på rangen."
+  }
+]` : activeTab === 'examples' ?
+  `[
+  {
+    "label": "Medlemskap & Förmåner",
+    "text": "Hej,\\n\\nJag har en fråga kring era medlemskap..."
   }
 ]` : undefined}
           />

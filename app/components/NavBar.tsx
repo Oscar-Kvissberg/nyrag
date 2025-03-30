@@ -1,23 +1,29 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { HomeIcon, EnvelopeIcon, ChartBarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 import { useRef, useEffect, useState } from 'react'
-import { clubs } from '../config/clubs'
+import Cookies from 'js-cookie'
+
+interface User {
+  username: string;
+  clubId: string;
+  role: string;
+}
 
 export default function NavBar() {
     const pathname = usePathname()
+    const router = useRouter()
     const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
     const homeRef = useRef<HTMLAnchorElement>(null)
     const mailRef = useRef<HTMLAnchorElement>(null)
     const statsRef = useRef<HTMLAnchorElement>(null)
     const adminRef = useRef<HTMLAnchorElement>(null)
+    const [user, setUser] = useState<User | null>(null)
 
     // Extract club from pathname
-    const clubKey = pathname.split('/')[1]
-    const clubConfig = clubs[clubKey] || clubs.vasatorp // Fallback till Vasatorp om klubben inte hittas
+    const clubKey = pathname.split('/')[1];
 
     useEffect(() => {
         const updateIndicator = () => {
@@ -30,7 +36,7 @@ export default function NavBar() {
                 const { offsetLeft, offsetWidth } = currentRef.current
                 setIndicatorStyle({
                     left: offsetLeft,
-                    width: offsetWidth,
+                    width: offsetWidth
                 })
             }
         }
@@ -40,75 +46,78 @@ export default function NavBar() {
         return () => window.removeEventListener('resize', updateIndicator)
     }, [pathname])
 
-    return (
-        <nav className="bg-white text-gray-800 shadow-md p-4 mb-8">
-            <div className="container mx-auto relative">
-                {/* Logo and Club Name - Absolute positioned */}
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center">
-                    <Image 
-                        src={clubConfig.logo}
-                        alt={clubConfig.displayName}
-                        width={32}
-                        height={32}
-                        className="object-contain"
-                    />
-                    <span className="ml-2 text-xl font-semibold text-gray-900 hidden lg:inline">
-                        {clubConfig.displayName}
-                    </span>
-                </div>
+    useEffect(() => {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+            setUser(JSON.parse(userStr))
+        }
+    }, [])
 
-                {/* Navigation Links - Centered */}
-                <div className="flex justify-center items-center relative">
-                    <div className="absolute top-0 left-0 w-full h-full">
-                        <div
-                            className="absolute h-[calc(100%-8px)] top-1 rounded-lg border border-blue-200 bg-blue-50 transition-all duration-300 ease-in-out"
-                            style={{
-                                left: `${indicatorStyle.left}px`,
-                                width: `${indicatorStyle.width}px`,
-                            }}
-                        />
+    const handleLogout = () => {
+        // Clear user data from localStorage and cookies
+        localStorage.removeItem('user')
+        Cookies.remove('token')
+        setUser(null)
+        router.push('/login')
+    }
+
+    // Don't show navbar on login page
+    if (pathname === '/login') return null
+
+    return (
+        <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-sm shadow-sm z-50">
+            <div className="container mx-auto px-4">
+                <div className="flex items-center justify-between h-16">
+                    <div className="flex items-center space-x-8">
+                        <Link
+                            ref={homeRef}
+                            href={`/${clubKey}`}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <HomeIcon className="w-5 h-5" />
+                            <span>Hem</span>
+                        </Link>
+                        <Link
+                            ref={mailRef}
+                            href={`/${clubKey}/MailGeneration`}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <EnvelopeIcon className="w-5 h-5" />
+                            <span>Generera</span>
+                        </Link>
+                        <Link
+                            ref={statsRef}
+                            href={`/${clubKey}/Stats`}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <ChartBarIcon className="w-5 h-5" />
+                            <span>Statistik</span>
+                        </Link>
+                        {user && (
+                            <Link
+                                ref={adminRef}
+                                href={`/${clubKey}/ClubData`}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <Cog6ToothIcon className="w-5 h-5" />
+                                <span>Admin</span>
+                            </Link>
+                        )}
                     </div>
-                    
-                    <Link
-                        ref={homeRef}
-                        href={`/${clubKey}`}
-                        className={`z-10 mx-2 sm:mx-6 px-2 sm:px-4 py-2 transition-colors duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                            pathname === `/${clubKey}` ? 'text-blue-600' : 'hover:text-gray-600'
-                        }`}
-                    >
-                        <HomeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Hem
-                    </Link>
-                    <Link
-                        ref={mailRef}
-                        href={`/${clubKey}/MailGeneration`}
-                        className={`z-10 mx-2 sm:mx-6 px-2 sm:px-4 py-2 transition-colors duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                            pathname.includes('/MailGeneration') ? 'text-blue-600' : 'hover:text-gray-600'
-                        }`}
-                    >
-                        <EnvelopeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Generering
-                    </Link>
-                    <Link
-                        ref={statsRef}
-                        href={`/${clubKey}/Stats`}
-                        className={`z-10 mx-2 sm:mx-6 px-2 sm:px-4 py-2 transition-colors duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                            pathname.includes('/Stats') ? 'text-blue-600' : 'hover:text-gray-600'
-                        }`}
-                    >
-                        <ChartBarIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Statistik
-                    </Link>
-                    <Link
-                        ref={adminRef}
-                        href={`/${clubKey}/ClubData`}
-                        className={`z-10 mx-2 sm:mx-6 px-2 sm:px-4 py-2 transition-colors duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                            pathname.includes('/ClubData') ? 'text-blue-600' : 'hover:text-gray-600'
-                        }`}
-                    >
-                        <Cog6ToothIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Admin
-                    </Link>
+                    {user && (
+                        <button
+                            onClick={handleLogout}
+                            className="text-sm text-gray-700 hover:text-gray-900"
+                        >
+                            Logga ut
+                        </button>
+                    )}
+                </div>
+                <div className="relative h-0.5 bg-gray-200">
+                    <div
+                        className="absolute h-full bg-blue-600 transition-all duration-300"
+                        style={indicatorStyle}
+                    />
                 </div>
             </div>
         </nav>
