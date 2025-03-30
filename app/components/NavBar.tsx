@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { HomeIcon, EnvelopeIcon, ChartBarIcon } from '@heroicons/react/24/outline'
+import { HomeIcon, EnvelopeIcon, ChartBarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 import { useRef, useEffect, useState } from 'react'
 import { clubs } from '../config/clubs'
 
@@ -13,6 +13,7 @@ export default function NavBar() {
     const homeRef = useRef<HTMLAnchorElement>(null)
     const mailRef = useRef<HTMLAnchorElement>(null)
     const statsRef = useRef<HTMLAnchorElement>(null)
+    const adminRef = useRef<HTMLAnchorElement>(null)
 
     // Extract club from pathname
     const clubKey = pathname.split('/')[1]
@@ -23,6 +24,7 @@ export default function NavBar() {
             let currentRef = homeRef
             if (pathname.includes('/MailGeneration')) currentRef = mailRef
             if (pathname.includes('/Stats')) currentRef = statsRef
+            if (pathname.includes('/ClubData')) currentRef = adminRef
 
             if (currentRef.current) {
                 const { offsetLeft, offsetWidth } = currentRef.current
@@ -96,6 +98,16 @@ export default function NavBar() {
                     >
                         <ChartBarIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                         Statistik
+                    </Link>
+                    <Link
+                        ref={adminRef}
+                        href={`/${clubKey}/ClubData`}
+                        className={`z-10 mx-2 sm:mx-6 px-2 sm:px-4 py-2 transition-colors duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base ${
+                            pathname.includes('/ClubData') ? 'text-blue-600' : 'hover:text-gray-600'
+                        }`}
+                    >
+                        <Cog6ToothIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                        Admin
                     </Link>
                 </div>
             </div>

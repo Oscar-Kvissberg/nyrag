@@ -1,5 +1,25 @@
 import { OpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { AzureKeyCredential, SearchClient } from '@azure/search-documents';
+
+interface SearchDocument {
+  chunk_id: string;
+  title: string;
+  content: string;
+}
+
+interface SearchResult {
+  '@search.score': number;
+  '@search.rerankerScore': number;
+  content: string;
+  title: string;
+}
+
+const searchClient = new SearchClient(
+  process.env.AZURE_SEARCH_ENDPOINT || '',
+  'index01',
+  new AzureKeyCredential(process.env.AZURE_SEARCH_KEY || '')
+);
 
 export async function POST(req: Request) {
   try {
@@ -40,10 +60,30 @@ export async function POST(req: Request) {
     const searchResults = await searchResponse.json();
     console.log('Search results:', searchResults);
 
-    // Create context from search results
-    const context = searchResults.value
-      .map((result: any) => `${result.title}\n${result.content}`)
-      .join('\n\n');
+    // Get relevant email examples
+    const emailResponse = await searchClient.search('*', {
+      filter: "title eq 'email'",
+      select: ['content'],
+      top: 3
+    });
+
+    const emailExamples = [];
+    for await (const result of emailResponse.results) {
+      const doc = result.document as SearchDocument;
+      const [question, answer] = doc.content.split('\n\n');
+      emailExamples.push({ question, answer });
+    }
+
+    // Create context from search results and email examples
+    const context = [
+      // Add general knowledge from search results
+      ...(searchResults.value as SearchResult[]).map(result => `${result.title}\n${result.content}`),
+      // Add email examples
+      '\nRelevanta exempel på e-postsvarsformat:\n',
+      ...emailExamples.map(example => 
+        `Fråga: ${example.question}\nSvar: ${example.answer}`
+      )
+    ].join('\n\n');
 
     // Then use OpenAI to generate a response based on the search results
     const client = new OpenAI({
@@ -56,11 +96,13 @@ export async function POST(req: Request) {
     const messages: ChatCompletionMessageParam[] = [
       {
         role: 'system',
-        content: `You are a helpful assistant for Vasatorps Golfklubb. Use the following information to answer the user's question. If you don't find relevant information, say so politely.`
+        content: `Du är en hjälpsam assistent för Vasatorps Golfklubb. Använd följande information för att svara på användarens fråga. 
+        Om frågan är i form av ett e-postmeddelande, använd de medföljande exempel på e-postsvarsformat för att strukturera ditt svar på ett liknande sätt.
+        Om du inte hittar relevant information, säg det artigt.`
       },
       {
         role: 'user',
-        content: `Context:\n${context}\n\nQuestion: ${message}`
+        content: `Kontext:\n${context}\n\nFråga: ${message}`
       }
     ];
 
@@ -84,12 +126,12 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'application/json' },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in generate-response:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Failed to generate response',
-        details: error.message 
+        details: error instanceof Error ? error.message : String(error)
       }), 
       { 
         status: 500,
