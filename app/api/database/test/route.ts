@@ -21,7 +21,7 @@ export async function GET() {
       throw new Error('Missing required database configuration');
     }
 
-    // SQL configuration
+    // SQL configuration for Vercel
     const sqlConfig = {
       user,
       password,
@@ -32,6 +32,11 @@ export async function GET() {
         trustServerCertificate: false,
         requestTimeout: 30000,
         connectionTimeout: 30000,
+        // Vercel specific settings
+        enableArithAbort: true,
+        maxRetriesOnTransientErrors: 3,
+        // Disable connection pooling for serverless
+        pool: false
       },
     };
 
@@ -43,6 +48,7 @@ export async function GET() {
       options: sqlConfig.options
     });
 
+    // Use a simpler connection approach
     const pool = await sql.connect(sqlConfig);
     console.log('Successfully connected to database');
     
