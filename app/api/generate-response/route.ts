@@ -1,26 +1,14 @@
 import { OpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { AzureKeyCredential, SearchClient } from '@azure/search-documents';
 import sql from 'mssql';
-
-interface SearchDocument {
-  chunk_id: string;
-  title: string;
-  content: string;
-}
 
 interface SearchResult {
   '@search.score': number;
   '@search.rerankerScore': number;
   content: string;
   title: string;
+  type: string;
 }
-
-const searchClient = new SearchClient(
-  process.env.AZURE_SEARCH_ENDPOINT || '',
-  'index01',
-  new AzureKeyCredential(process.env.AZURE_SEARCH_KEY || '')
-);
 
 // SQL configuration
 const sqlConfig = {
@@ -103,43 +91,28 @@ export async function POST(req: Request) {
           search: message,
           queryType: 'semantic',
           semanticConfiguration: 'default',
-          select: 'content,title',
-          top: 3
+          select: 'content,title,club_id',
+          filter: `club_id eq '${clubId}'`,
+          top: 5
         })
       }
     );
 
     if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      console.error('Search response error:', errorText);
       throw new Error(`Search failed: ${searchResponse.statusText}`);
     }
 
     const searchResults = await searchResponse.json();
     console.log('Search results:', searchResults);
 
-    // Get relevant email examples
-    const emailResponse = await searchClient.search('*', {
-      filter: "title eq 'email'",
-      select: ['content'],
-      top: 3
-    });
+    // Get all results
+    const results = (searchResults.value as SearchResult[])
+      .map(result => `${result.title}\n${result.content}`);
 
-    const emailExamples = [];
-    for await (const result of emailResponse.results) {
-      const doc = result.document as SearchDocument;
-      const [question, answer] = doc.content.split('\n\n');
-      emailExamples.push({ question, answer });
-    }
-
-    // Create context from search results and email examples
-    const context = [
-      // Add general knowledge from search results
-      ...(searchResults.value as SearchResult[]).map(result => `${result.title}\n${result.content}`),
-      // Add email examples
-      '\nRelevanta exempel på e-postsvarsformat:\n',
-      ...emailExamples.map(example => 
-        `Fråga: ${example.question}\nSvar: ${example.answer}`
-      )
-    ].join('\n\n');
+    // Create context from search results
+    const context = results.join('\n\n');
 
     // Then use OpenAI to generate a response based on the search results
     const client = new OpenAI({
@@ -152,7 +125,7 @@ export async function POST(req: Request) {
     const messages: ChatCompletionMessageParam[] = [
       {
         role: 'system',
-        content: `Du är en hjälpsam assistent för Vasatorps Golfklubb. Använd följande information för att svara på användarens fråga. 
+        content: `Du är en hjälpsam assistent för ${clubId === 'rattvik' ? 'Rättviks' : 'Vasatorps'} Golfklubb. Använd följande information för att svara på användarens fråga. 
         Om frågan är i form av ett e-postmeddelande, använd de medföljande exempel på e-postsvarsformat för att strukturera ditt svar på ett liknande sätt.
         Om du inte hittar relevant information, säg det artigt.`
       },

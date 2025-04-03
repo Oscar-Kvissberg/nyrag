@@ -101,7 +101,7 @@ export default function OpenAIBot() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!message.trim() || isLoading) return;
+        if (!message.trim() || isLoading || !user?.clubId) return;
 
         setError(null);
         setIsLoading(true);
@@ -115,7 +115,8 @@ export default function OpenAIBot() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    message: message.trim()
+                    message: message.trim(),
+                    clubId: user.clubId
                 }),
             });
 

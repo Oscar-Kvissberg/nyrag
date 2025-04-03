@@ -27,7 +27,7 @@ async function ensureUsersTable() {
         CREATE TABLE users (
           id INT IDENTITY(1,1) PRIMARY KEY,
           username NVARCHAR(255) UNIQUE NOT NULL,
-          password_hash NVARCHAR(255) NOT NULL,
+          hashed_password NVARCHAR(255) NOT NULL,
           club_id NVARCHAR(100) NOT NULL,
           role NVARCHAR(50) NOT NULL DEFAULT 'user',
           created_at DATETIME2 DEFAULT GETDATE(),
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       .input('passwordHash', sql.NVarChar, passwordHash)
       .input('clubId', sql.NVarChar, clubId)
       .query(`
-        INSERT INTO users (username, password_hash, club_id)
+        INSERT INTO users (username, hashed_password, club_id)
         VALUES (@username, @passwordHash, @clubId)
       `);
 
@@ -136,18 +136,13 @@ export async function PUT(req: Request) {
     const user = result.recordset[0];
 
     // Verify password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const validPassword = await bcrypt.compare(password, user.hashed_password);
     if (!validPassword) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       );
     }
-
-    // Update last login
-    await pool.request()
-      .input('id', sql.Int, user.id)
-      .query('UPDATE users SET last_login = GETDATE() WHERE id = @id');
 
     // Generate JWT token
     const token = jwt.sign(
