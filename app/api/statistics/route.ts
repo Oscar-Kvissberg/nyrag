@@ -8,21 +8,57 @@ export async function GET(req: Request) {
     const { clubId } = await verifyAuth(req);
     const sql = await getSql();
 
-    const stats = await sql`
+    // First, aggregate today's interactions
+    await sql`
+      INSERT INTO daily_statistics (
+        club_id,
+        date,
+        total_interactions,
+        total_tokens_used
+      )
+      SELECT 
+        club_id,
+        DATE(timestamp) as date,
+        COUNT(*) as total_interactions,
+        SUM(tokens_used) as total_tokens_used
+      FROM user_interactions
+      WHERE club_id = ${clubId}
+        AND DATE(timestamp) = CURRENT_DATE
+      GROUP BY club_id, DATE(timestamp)
+      ON CONFLICT (club_id, date)
+      DO UPDATE SET
+        total_interactions = EXCLUDED.total_interactions,
+        total_tokens_used = EXCLUDED.total_tokens_used
+    `;
+
+    // Get daily statistics
+    const dailyStats = await sql`
       SELECT 
         date,
-        total_interactions as total_interactions,
-        total_tokens_used as total_tokens,
-        average_response_time_ms as avg_response_time,
-        positive_feedback_count as positive_feedback,
-        negative_feedback_count as negative_feedback
+        total_interactions,
+        total_tokens_used as total_tokens
       FROM daily_statistics 
       WHERE club_id = ${clubId}
       ORDER BY date DESC
       LIMIT 30
     `;
 
-    return NextResponse.json({ success: true, statistics: stats });
+    // Get category statistics
+    const categoryStats = await sql`
+      SELECT 
+        category,
+        COUNT(*) as count
+      FROM user_interactions
+      WHERE club_id = ${clubId}
+        AND category IS NOT NULL
+      GROUP BY category
+    `;
+
+    return NextResponse.json({ 
+      success: true, 
+      statistics: dailyStats,
+      categories: categoryStats
+    });
   } catch (error) {
     console.error('Error getting statistics:', error);
     return NextResponse.json(
@@ -44,26 +80,17 @@ export async function POST(req: Request) {
         club_id,
         date,
         total_interactions,
-        total_tokens_used,
-        average_response_time_ms,
-        positive_feedback_count,
-        negative_feedback_count
+        total_tokens_used
       ) VALUES (
         ${clubId},
         ${data.date},
         ${data.total_interactions || 0},
-        ${data.total_tokens_used || 0},
-        ${data.average_response_time_ms || 0},
-        ${data.positive_feedback_count || 0},
-        ${data.negative_feedback_count || 0}
+        ${data.total_tokens_used || 0}
       )
       ON CONFLICT (club_id, date) 
       DO UPDATE SET
         total_interactions = EXCLUDED.total_interactions,
-        total_tokens_used = EXCLUDED.total_tokens_used,
-        average_response_time_ms = EXCLUDED.average_response_time_ms,
-        positive_feedback_count = EXCLUDED.positive_feedback_count,
-        negative_feedback_count = EXCLUDED.negative_feedback_count
+        total_tokens_used = EXCLUDED.total_tokens_used
     `;
 
     return NextResponse.json({ success: true });

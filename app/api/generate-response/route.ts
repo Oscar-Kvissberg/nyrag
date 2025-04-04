@@ -30,6 +30,7 @@ const searchClient = new SearchClient(
 
 export async function POST(req: Request) {
   try {
+    const startTime = Date.now();
     let clubId;
     try {
       const auth = await verifyAuth(req);
@@ -143,8 +144,50 @@ Var tydlig och konkret i ditt svar.`;
       console.log('OpenAI API call successful');
 
       const response = completion.choices[0].message.content;
+      const tokensUsed = completion.usage?.total_tokens || 0;
+      const responseTime = Date.now() - startTime;
+      
       console.log('Response generated, length:', response?.length);
+      console.log('Tokens used:', tokensUsed);
+      console.log('Response time:', responseTime, 'ms');
 
+      // Determine question category based on content
+      const determineCategory = (question: string): string => {
+        const lowerQuestion = question.toLowerCase();
+        
+        if (lowerQuestion.includes('medlem') || lowerQuestion.includes('avgift') || lowerQuestion.includes('kostnad')) {
+          return 'Medlemskap & Avgifter';
+        }
+        if (lowerQuestion.includes('boka') || lowerQuestion.includes('starttid') || lowerQuestion.includes('tee time')) {
+          return 'Bokningar & Starttider';
+        }
+        if (lowerQuestion.includes('bana') || lowerQuestion.includes('course') || lowerQuestion.includes('green')) {
+          return 'Banor & Anläggning';
+        }
+        if (lowerQuestion.includes('tävling') || lowerQuestion.includes('turnering') || lowerQuestion.includes('competition')) {
+          return 'Tävlingar & Events';
+        }
+        if (lowerQuestion.includes('lektion') || lowerQuestion.includes('träning') || lowerQuestion.includes('pro')) {
+          return 'Träning & Lektioner';
+        }
+        if (lowerQuestion.includes('restaurang') || lowerQuestion.includes('mat') || lowerQuestion.includes('café')) {
+          return 'Restaurang & Service';
+        }
+        if (lowerQuestion.includes('shop') || lowerQuestion.includes('butik') || lowerQuestion.includes('utrustning')) {
+          return 'Golfshop & Utrustning';
+        }
+        if (lowerQuestion.includes('junior') || lowerQuestion.includes('ungdom') || lowerQuestion.includes('barn')) {
+          return 'Juniorverksamhet';
+        }
+        if (lowerQuestion.includes('öppet') || lowerQuestion.includes('tid') || lowerQuestion.includes('kontakt')) {
+          return 'Öppettider & Kontakt';
+        }
+        
+        return 'Övrigt';
+      };
+
+      const category = determineCategory(message);
+      
       // Log interaction
       await sql`
         INSERT INTO user_interactions (
@@ -160,9 +203,9 @@ Var tydlig och konkret i ditt svar.`;
           'chat',
           ${message},
           ${response},
-          ${0},
-          ${0},
-          'chat'
+          ${responseTime},
+          ${tokensUsed},
+          ${category}
         )
       `;
       console.log('Interaction logged to database');
