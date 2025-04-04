@@ -1,7 +1,29 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts'
+import Cookies from 'js-cookie'
+import { Line } from 'react-chartjs-2'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+} from 'chart.js'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  ChartTooltip,
+  ChartLegend
+)
 
 interface DailyStats {
   date: string;
@@ -17,11 +39,6 @@ interface QuestionCategory {
   value: number;
 }
 
-interface CategoryStats {
-    category: string;
-    count: number;
-}
-
 interface User {
   username: string;
   clubId: string;
@@ -31,10 +48,10 @@ interface User {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
 
 export default function Stats() {
-    const [stats, setStats] = useState<DailyStats[]>([]);
+    const [statistics, setStatistics] = useState<DailyStats[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [questionCategories, setQuestionCategories] = useState<QuestionCategory[]>([]);
+    const [questionCategories] = useState<QuestionCategory[]>([]);
     const [user, setUser] = useState<User | null>(null);
     
     useEffect(() => {
@@ -46,59 +63,104 @@ export default function Stats() {
     }, []);
 
     useEffect(() => {
-        const fetchStats = async () => {
-            if (!user?.clubId) return;
-
+        const fetchStatistics = async () => {
             try {
-                // Hämta statistik för de senaste 30 dagarna
-                const endDate = new Date();
-                const startDate = new Date();
-                startDate.setDate(startDate.getDate() - 30);
-
-                const [statsResponse, categoriesResponse] = await Promise.all([
-                    fetch(`/api/statistics?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}&clubId=${user.clubId}`),
-                    fetch(`/api/statistics/categories?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}&clubId=${user.clubId}`)
-                ]);
-
-                const [statsData, categoriesData] = await Promise.all([
-                    statsResponse.json(),
-                    categoriesResponse.json()
-                ]);
-
-                if (!statsData.success) {
-                    throw new Error(statsData.error || 'Failed to fetch statistics');
+                const token = Cookies.get('token');
+                if (!token) {
+                    setError('No authentication token found');
+                    return;
                 }
 
-                setStats(statsData.statistics);
+                const response = await fetch('/api/statistics', {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
 
-                // Beräkna procentuell fördelning av kategorier
-                if (categoriesData.success) {
-                    const total = categoriesData.categories.reduce((sum: number, cat: CategoryStats) => sum + cat.count, 0);
-                    const categoriesWithPercentage = categoriesData.categories.map((cat: CategoryStats) => ({
-                        name: `${cat.category} (${Math.round((cat.count / total) * 100)}%)`,
-                        value: cat.count
-                    }));
-                    setQuestionCategories(categoriesWithPercentage);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch statistics');
+                }
+
+                const data = await response.json();
+                if (data.success && data.statistics) {
+                    setStatistics(data.statistics);
+                } else {
+                    throw new Error('Invalid data format received');
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load statistics');
+                console.error('Error fetching statistics:', err);
+                setError(err instanceof Error ? err.message : 'Failed to fetch statistics');
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchStats();
-    }, [user?.clubId]);
+        fetchStatistics();
+    }, []);
 
-    const totalInteractions = stats.reduce((sum, day) => sum + day.total_interactions, 0);
-    const totalTokens = stats.reduce((sum, day) => sum + day.total_tokens, 0);
-    const averageResponseTime = stats.reduce((sum, day) => sum + day.avg_response_time, 0) / stats.length;
-    const positiveFeedback = stats.reduce((sum, day) => sum + day.positive_feedback, 0);
-    const negativeFeedback = stats.reduce((sum, day) => sum + day.negative_feedback, 0);
+    const totalInteractions = statistics.reduce((sum, day) => sum + day.total_interactions, 0);
+    const totalTokens = statistics.reduce((sum, day) => sum + day.total_tokens, 0);
+    const averageResponseTime = statistics.reduce((sum, day) => sum + day.avg_response_time, 0) / statistics.length;
+    const positiveFeedback = statistics.reduce((sum, day) => sum + day.positive_feedback, 0);
+    const negativeFeedback = statistics.reduce((sum, day) => sum + day.negative_feedback, 0);
 
     if (loading) return <div className="text-center py-8">Laddar statistik...</div>;
     if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
     if (!user?.clubId) return <div className="text-center py-8">Du måste vara inloggad för att se statistik.</div>;
+
+    const chartData = {
+        labels: statistics.map(stat => new Date(stat.date).toLocaleDateString()),
+        datasets: [
+            {
+                label: 'Total Interactions',
+                data: statistics.map(stat => stat.total_interactions),
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+            },
+            {
+                label: 'Total Tokens',
+                data: statistics.map(stat => stat.total_tokens),
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.1,
+            },
+            {
+                label: 'Average Response Time (ms)',
+                data: statistics.map(stat => stat.avg_response_time),
+                borderColor: 'rgb(54, 162, 235)',
+                tension: 0.1,
+            },
+            {
+                label: 'Positive Feedback',
+                data: statistics.map(stat => stat.positive_feedback),
+                borderColor: 'rgb(75, 192, 75)',
+                tension: 0.1,
+            },
+            {
+                label: 'Negative Feedback',
+                data: statistics.map(stat => stat.negative_feedback),
+                borderColor: 'rgb(255, 99, 99)',
+                tension: 0.1,
+            },
+        ],
+    };
+
+    const options = {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top' as const,
+            },
+            title: {
+                display: true,
+                text: 'Chat Statistics Over Time',
+            },
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+            },
+        },
+    };
 
     return (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -165,14 +227,7 @@ export default function Stats() {
                 <h3 className="text-xl font-semibold text-gray-700 mb-4">Daglig Aktivitet</h3>
                 <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats}>
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="total_interactions" fill="#0088FE" name="Interaktioner" />
-                            <Bar dataKey="positive_feedback" fill="#00C49F" name="Positiv Feedback" />
-                            <Bar dataKey="negative_feedback" fill="#FF8042" name="Negativ Feedback" />
-                        </BarChart>
+                        <Line data={chartData} options={options} />
                     </ResponsiveContainer>
                 </div>
             </div>

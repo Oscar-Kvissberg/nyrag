@@ -2,30 +2,29 @@ import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
 
-// Get Q&A examples
+// Get QA examples for a specific club
 export async function GET(req: Request) {
   try {
     const { clubId } = await verifyAuth(req);
     const sql = await getSql();
 
     const examples = await sql`
-      SELECT id, question, answer
-      FROM qa_examples
+      SELECT * FROM qa_examples 
       WHERE club_id = ${clubId}
       ORDER BY created_at DESC
     `;
 
-    return NextResponse.json({ examples });
+    return NextResponse.json(examples);
   } catch (error) {
-    console.error('Error getting Q&A examples:', error);
+    console.error('Error getting QA examples:', error);
     return NextResponse.json(
-      { error: 'Failed to get Q&A examples' },
+      { error: 'Failed to get QA examples' },
       { status: 500 }
     );
   }
 }
 
-// Create Q&A example
+// Create a new QA example
 export async function POST(req: Request) {
   try {
     const { clubId } = await verifyAuth(req);
@@ -48,9 +47,31 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error creating Q&A example:', error);
+    console.error('Error creating QA example:', error);
     return NextResponse.json(
-      { error: 'Failed to create Q&A example' },
+      { error: 'Failed to create QA example' },
+      { status: 500 }
+    );
+  }
+}
+
+// Delete a QA example
+export async function DELETE(req: Request) {
+  try {
+    const { clubId } = await verifyAuth(req);
+    const { id } = await req.json();
+    const sql = await getSql();
+
+    await sql`
+      DELETE FROM qa_examples 
+      WHERE id = ${id} AND club_id = ${clubId}
+    `;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting QA example:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete QA example' },
       { status: 500 }
     );
   }

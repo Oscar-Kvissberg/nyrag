@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Cookies from 'js-cookie';
 
 interface ExampleEmail {
     label: string;
@@ -24,7 +25,6 @@ export default function OpenAIBot() {
     const responseTextareaRef = useRef<HTMLTextAreaElement>(null);
     const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
     const selectRef = useRef<HTMLSelectElement>(null);
-    const [feedbackSent, setFeedbackSent] = useState(false);
     const [user, setUser] = useState<User | null>(null);
 
     useEffect(() => {
@@ -41,7 +41,17 @@ export default function OpenAIBot() {
             if (!user?.clubId) return;
 
             try {
-                const response = await fetch(`/api/example-questions?clubId=${user.clubId}`);
+                const token = Cookies.get('token');
+                if (!token) {
+                    setError('No authentication token found');
+                    return;
+                }
+
+                const response = await fetch(`/api/example-questions?clubId=${user.clubId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                 const data = await response.json();
                 
                 if (data.examples) {
@@ -105,14 +115,20 @@ export default function OpenAIBot() {
 
         setError(null);
         setIsLoading(true);
-        setFeedbackSent(false);
 
         try {
+            const token = Cookies.get('token');
+            if (!token) {
+                setError('No authentication token found');
+                return;
+            }
+
             console.log('Sending request to generate response...');
             const res = await fetch('/api/generate-response', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     message: message.trim(),
@@ -144,37 +160,6 @@ export default function OpenAIBot() {
             setError(errorMessage);
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const handleFeedback = async (quality: 'good' | 'bad', feedback?: string) => {
-        if (feedbackSent) return;
-
-        try {
-            const res = await fetch('/api/statistics', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    clubId: 'default',
-                    interactionType: 'feedback',
-                    question: message,
-                    answer: response,
-                    feedback: quality,
-                    feedbackText: feedback,
-                    responseTimeMs: 0,
-                    tokensUsed: 0
-                }),
-            });
-
-            if (!res.ok) {
-                throw new Error('Failed to send feedback');
-            }
-
-            setFeedbackSent(true);
-        } catch (error) {
-            console.error('Error sending feedback:', error);
         }
     };
 
@@ -293,31 +278,6 @@ export default function OpenAIBot() {
                                     </>
                                 )}
                             </button>
-
-                            {response && !feedbackSent && (
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => handleFeedback('good')}
-                                        className="px-3 py-1 rounded-lg bg-green-500 text-white text-sm hover:bg-green-600 transition-colors"
-                                        title="Bra svar"
-                                    >
-                                        👍
-                                    </button>
-                                    <button
-                                        onClick={() => handleFeedback('bad')}
-                                        className="px-3 py-1 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 transition-colors"
-                                        title="Dåligt svar"
-                                    >
-                                        👎
-                                    </button>
-                                </div>
-                            )}
-
-                            {feedbackSent && (
-                                <span className="text-sm text-gray-500">
-                                    Tack för din feedback!
-                                </span>
-                            )}
                         </div>
                         <textarea
                             ref={responseTextareaRef}

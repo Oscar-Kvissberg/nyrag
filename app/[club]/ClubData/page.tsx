@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import React from 'react';
+import Cookies from 'js-cookie';
 
 interface Document {
   id: number;
@@ -32,187 +33,279 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
   const [documents, setDocuments] = useState<Document[]>([]);
   const [emailExamples, setEmailExamples] = useState<EmailExample[]>([]);
   const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [jsonData, setJsonData] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'documents' | 'emails' | 'examples'>('documents');
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Form state
+  const [newDocument, setNewDocument] = useState({ title: '', content: '' });
+  const [newEmailExample, setNewEmailExample] = useState({ question: '', answer: '' });
+  const [newExampleQuestion, setNewExampleQuestion] = useState({ label: '', text: '' });
 
   useEffect(() => {
     // Get user from localStorage
     const userStr = localStorage.getItem('user');
     if (userStr) {
-      setUser(JSON.parse(userStr));
+      try {
+        const parsedUser = JSON.parse(userStr);
+        if (parsedUser && parsedUser.clubId) {
+          setUser(parsedUser);
+        } else {
+          setError('Invalid user data');
+        }
+      } catch (err) {
+        setError('Failed to parse user data');
+        console.error(err);
+      }
+    } else {
+      setError('No user found. Please log in.');
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    // Fetch data from database
     const fetchData = async () => {
       if (!user?.clubId) return;
 
       try {
-        // Fetch documents
-        const docsResponse = await fetch(`/api/documents?clubId=${user.clubId}`);
-        const docsData = await docsResponse.json();
-        if (docsData.documents) {
-          // Remove IDs from documents
-          const docsWithoutIds = docsData.documents.map(({ title, content }: Document) => ({ title, content }));
-          setDocuments(docsData.documents);
-          setJsonData(JSON.stringify(docsWithoutIds, null, 2));
+        const token = Cookies.get('token');
+        if (!token) {
+          setError('No authentication token found');
+          return;
         }
 
-        // Fetch Q&A
-        const qaResponse = await fetch(`/api/qa?clubId=${user.clubId}`);
-        const qaData = await qaResponse.json();
-        if (qaData.examples) {
-          // Remove IDs from examples
-          const qaWithoutIds = qaData.examples.map(({ question, answer }: EmailExample) => ({ question, answer }));
-          setEmailExamples(qaData.examples);
-          setJsonData(JSON.stringify(qaWithoutIds, null, 2));
-        }
+        const [documentsRes, emailsRes, examplesRes] = await Promise.all([
+          fetch(`/api/documents?clubId=${user.clubId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }),
+          fetch(`/api/qa?clubId=${user.clubId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }),
+          fetch(`/api/example-questions?clubId=${user.clubId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+        ]);
 
-        // Fetch example questions
-        const examplesResponse = await fetch(`/api/example-questions?clubId=${user.clubId}`);
-        const examplesData = await examplesResponse.json();
-        if (examplesData.examples) {
-          // Remove IDs from examples
-          const examplesWithoutIds = examplesData.examples.map(({ label, text }: ExampleQuestion) => ({ label, text }));
-          setExampleQuestions(examplesData.examples);
-          setJsonData(JSON.stringify(examplesWithoutIds, null, 2));
-        }
+        const [documentsData, emailsData, examplesData] = await Promise.all([
+          documentsRes.json(),
+          emailsRes.json(),
+          examplesRes.json()
+        ]);
+
+        if (documentsData.documents) setDocuments(documentsData.documents);
+        if (emailsData.examples) setEmailExamples(emailsData.examples);
+        if (examplesData.examples) setExampleQuestions(examplesData.examples);
       } catch (err) {
-        setError('Failed to fetch data');
-        console.error(err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch data');
       }
     };
 
     fetchData();
-    setLoading(false);
   }, [user?.clubId]);
 
-  const handleSave = async () => {
+  const handleSaveDocuments = async () => {
     if (!user?.clubId) return;
 
     try {
       setSaveStatus('saving');
-      const parsedData = JSON.parse(jsonData);
       
-      // Validate data structure based on active tab
-      if (activeTab === 'documents') {
-        if (!Array.isArray(parsedData) || !parsedData.every(doc => 
-          typeof doc.title === 'string' && typeof doc.content === 'string'
-        )) {
-          throw new Error('Ogiltig dokumentstruktur. Varje dokument måste ha title och content.');
-        }
-      } else if (activeTab === 'emails') {
-        if (!Array.isArray(parsedData) || !parsedData.every(qa => 
-          typeof qa.question === 'string' && typeof qa.answer === 'string'
-        )) {
-          throw new Error('Ogiltig mejlstruktur. Varje mejl måste ha question och answer.');
-        }
-      } else {
-        if (!Array.isArray(parsedData) || !parsedData.every(ex => 
-          typeof ex.label === 'string' && typeof ex.text === 'string'
-        )) {
-          throw new Error('Ogiltig exempelstruktur. Varje exempel måste ha label och text.');
-        }
-      }
-
-      // Update data based on active tab
-      const endpoint = activeTab === 'documents' ? '/api/documents' : 
-                      activeTab === 'emails' ? '/api/qa' : '/api/example-questions';
+      // Prepare data without IDs
+      const docsWithoutIds = documents.map(({ title, content }) => ({ title, content }));
       
-      const response = await fetch(`${endpoint}?clubId=${user.clubId}`, {
+      const response = await fetch(`/api/documents?clubId=${user.clubId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Cookies.get('token')}`
         },
-        body: JSON.stringify(parsedData),
+        body: JSON.stringify(docsWithoutIds),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save changes');
+        throw new Error('Failed to save documents');
       }
 
       setSaveStatus('success');
-      setIsEditing(false);
       
       // Refresh the data
-      const refreshResponse = await fetch(`${endpoint}?clubId=${user.clubId}`);
+      const refreshResponse = await fetch(`/api/documents?clubId=${user.clubId}`, {
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
       const refreshData = await refreshResponse.json();
-      if (activeTab === 'documents' && refreshData.documents) {
+      if (refreshData.documents) {
         setDocuments(refreshData.documents);
-        setJsonData(JSON.stringify(refreshData.documents, null, 2));
-      } else if (activeTab === 'emails' && refreshData.examples) {
-        setEmailExamples(refreshData.examples);
-        setJsonData(JSON.stringify(refreshData.examples, null, 2));
-      } else if (activeTab === 'examples' && refreshData.examples) {
-        setExampleQuestions(refreshData.examples);
-        setJsonData(JSON.stringify(refreshData.examples, null, 2));
       }
     } catch (err) {
       setSaveStatus('error');
-      setError(err instanceof Error ? err.message : 'Failed to save changes');
+      setError(err instanceof Error ? err.message : 'Failed to save documents');
       console.error(err);
     }
   };
 
-  if (loading) return <div className="p-8">Loading...</div>;
-  if (error) return <div className="p-8 text-red-500">{error}</div>;
-  if (!user?.clubId) return <div className="p-8">Du måste vara inloggad för att se denna sida.</div>;
+  const handleSaveEmailExamples = async () => {
+    if (!user?.clubId) return;
+
+    try {
+      setSaveStatus('saving');
+      
+      // Prepare data without IDs
+      const examplesWithoutIds = emailExamples.map(({ question, answer }) => ({ question, answer }));
+      
+      const response = await fetch(`/api/qa?clubId=${user.clubId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        },
+        body: JSON.stringify(examplesWithoutIds),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save email examples');
+      }
+
+      setSaveStatus('success');
+      
+      // Refresh the data
+      const refreshResponse = await fetch(`/api/qa?clubId=${user.clubId}`, {
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+      const refreshData = await refreshResponse.json();
+      if (refreshData.examples) {
+        setEmailExamples(refreshData.examples);
+      }
+    } catch (err) {
+      setSaveStatus('error');
+      setError(err instanceof Error ? err.message : 'Failed to save email examples');
+      console.error(err);
+    }
+  };
+
+  const handleSaveExampleQuestions = async () => {
+    if (!user?.clubId) return;
+
+    try {
+      setSaveStatus('saving');
+      
+      // Prepare data without IDs
+      const examplesWithoutIds = exampleQuestions.map(({ label, text }) => ({ label, text }));
+      
+      const response = await fetch(`/api/example-questions?clubId=${user.clubId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        },
+        body: JSON.stringify(examplesWithoutIds),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save example questions');
+      }
+
+      setSaveStatus('success');
+      
+      // Refresh the data
+      const refreshResponse = await fetch(`/api/example-questions?clubId=${user.clubId}`, {
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+      const refreshData = await refreshResponse.json();
+      if (refreshData.examples) {
+        setExampleQuestions(refreshData.examples);
+      }
+    } catch (err) {
+      setSaveStatus('error');
+      setError(err instanceof Error ? err.message : 'Failed to save example questions');
+      console.error(err);
+    }
+  };
+
+  const addDocument = () => {
+    if (newDocument.title && newDocument.content) {
+      setDocuments([...documents, { id: Date.now(), ...newDocument }]);
+      setNewDocument({ title: '', content: '' });
+    }
+  };
+
+  const addEmailExample = () => {
+    if (newEmailExample.question && newEmailExample.answer) {
+      setEmailExamples([...emailExamples, { id: Date.now(), ...newEmailExample }]);
+      setNewEmailExample({ question: '', answer: '' });
+    }
+  };
+
+  const addExampleQuestion = () => {
+    if (newExampleQuestion.label && newExampleQuestion.text) {
+      setExampleQuestions([...exampleQuestions, { id: Date.now(), ...newExampleQuestion }]);
+      setNewExampleQuestion({ label: '', text: '' });
+    }
+  };
+
+  const removeDocument = (id: number) => {
+    setDocuments(documents.filter(doc => doc.id !== id));
+  };
+
+  const removeEmailExample = (id: number) => {
+    setEmailExamples(emailExamples.filter(ex => ex.id !== id));
+  };
+
+  const removeExampleQuestion = (id: number) => {
+    setExampleQuestions(exampleQuestions.filter(ex => ex.id !== id));
+  };
+
+  if (isLoading) {
+    return <div className="p-4">Loading user data...</div>;
+  }
+
+  if (error) {
+    return <div className="p-4 text-red-500">{error}</div>;
+  }
+
+  if (!user?.clubId) {
+    return <div className="p-4">Please log in to access this page.</div>;
+  }
 
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Admin - {resolvedParams.club}</h1>
         <div className="flex gap-4">
-          {isEditing ? (
-            <>
-              <button
-                onClick={handleSave}
-                disabled={saveStatus === 'saving'}
-                className={`px-4 py-2 rounded-lg font-semibold ${
-                  saveStatus === 'saving' 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                {saveStatus === 'saving' ? 'Sparar...' : 'Spara Ändringar'}
-              </button>
-              <button
-                onClick={() => {
-                  setIsEditing(false);
-                  setSaveStatus('idle');
-                  setError(null);
-                }}
-                className="px-4 py-2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-700 text-white"
-              >
-                Avbryt
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              Redigera
-            </button>
-          )}
+          <button
+            onClick={
+              activeTab === 'documents' ? handleSaveDocuments :
+              activeTab === 'emails' ? handleSaveEmailExamples :
+              handleSaveExampleQuestions
+            }
+            disabled={saveStatus === 'saving'}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              saveStatus === 'saving' 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+          >
+            {saveStatus === 'saving' ? 'Sparar...' : 'Spara Ändringar'}
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6">
         <button
-          onClick={() => {
-            setActiveTab('documents');
-            // Remove IDs when switching to documents tab
-            const docsWithoutIds = documents.map(({ title, content }: Document) => ({ title, content }));
-            setJsonData(JSON.stringify(docsWithoutIds, null, 2));
-          }}
+          onClick={() => setActiveTab('documents')}
           className={`px-4 py-2 rounded-lg font-semibold ${
             activeTab === 'documents'
               ? 'bg-blue-600 text-white'
@@ -222,12 +315,7 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
           Dokument
         </button>
         <button
-          onClick={() => {
-            setActiveTab('emails');
-            // Remove IDs when switching to emails tab
-            const qaWithoutIds = emailExamples.map(({ question, answer }: EmailExample) => ({ question, answer }));
-            setJsonData(JSON.stringify(qaWithoutIds, null, 2));
-          }}
+          onClick={() => setActiveTab('emails')}
           className={`px-4 py-2 rounded-lg font-semibold ${
             activeTab === 'emails'
               ? 'bg-blue-600 text-white'
@@ -237,12 +325,7 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
           Frågor & Svar
         </button>
         <button
-          onClick={() => {
-            setActiveTab('examples');
-            // Remove IDs when switching to examples tab
-            const examplesWithoutIds = exampleQuestions.map(({ label, text }: ExampleQuestion) => ({ label, text }));
-            setJsonData(JSON.stringify(examplesWithoutIds, null, 2));
-          }}
+          onClick={() => setActiveTab('examples')}
           className={`px-4 py-2 rounded-lg font-semibold ${
             activeTab === 'examples'
               ? 'bg-blue-600 text-white'
@@ -254,30 +337,169 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
-        {isEditing ? (
-          <textarea
-            value={jsonData}
-            onChange={(e) => setJsonData(e.target.value)}
-            className="w-full h-[calc(100vh-200px)] p-4 font-mono text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            spellCheck="false"
-            placeholder={activeTab === 'emails' ? 
-              `[
-  {
-    "question": "Måste jag boka plats på Trackman Range?",
-    "answer": "Nej det behöver du inte. Det är first-come-first-serve. Användandet av Trackman Range ingår i bollpriset på rangen."
-  }
-]` : activeTab === 'examples' ?
-  `[
-  {
-    "label": "Medlemskap & Förmåner",
-    "text": "Hej,\\n\\nJag har en fråga kring era medlemskap..."
-  }
-]` : undefined}
-          />
-        ) : (
-          <pre className="whitespace-pre-wrap overflow-x-auto text-sm">
-            {jsonData}
-          </pre>
+        {/* Documents Tab */}
+        {activeTab === 'documents' && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Dokument</h2>
+            
+            {/* Add new document form */}
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <h3 className="text-lg font-medium mb-3">Lägg till nytt dokument</h3>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                <input
+                  type="text"
+                  value={newDocument.title}
+                  onChange={(e) => setNewDocument({...newDocument, title: e.target.value})}
+                  className="w-full p-2 border rounded-md"
+                  placeholder="Ange titel"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Innehåll</label>
+                <textarea
+                  value={newDocument.content}
+                  onChange={(e) => setNewDocument({...newDocument, content: e.target.value})}
+                  className="w-full p-2 border rounded-md h-32"
+                  placeholder="Ange innehåll"
+                />
+              </div>
+              <button
+                onClick={addDocument}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Lägg till
+              </button>
+            </div>
+            
+            {/* List of documents */}
+            <div className="space-y-4">
+              {documents.map((doc) => (
+                <div key={doc.id} className="p-4 border rounded-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-medium">{doc.title}</h3>
+                    <button
+                      onClick={() => removeDocument(doc.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Ta bort
+                    </button>
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{doc.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Email Examples Tab */}
+        {activeTab === 'emails' && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Frågor & Svar</h2>
+            
+            {/* Add new email example form */}
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <h3 className="text-lg font-medium mb-3">Lägg till ny fråga & svar</h3>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fråga</label>
+                <input
+                  type="text"
+                  value={newEmailExample.question}
+                  onChange={(e) => setNewEmailExample({...newEmailExample, question: e.target.value})}
+                  className="w-full p-2 border rounded-md"
+                  placeholder="Ange fråga"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Svar</label>
+                <textarea
+                  value={newEmailExample.answer}
+                  onChange={(e) => setNewEmailExample({...newEmailExample, answer: e.target.value})}
+                  className="w-full p-2 border rounded-md h-32"
+                  placeholder="Ange svar"
+                />
+              </div>
+              <button
+                onClick={addEmailExample}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Lägg till
+              </button>
+            </div>
+            
+            {/* List of email examples */}
+            <div className="space-y-4">
+              {emailExamples.map((example) => (
+                <div key={example.id} className="p-4 border rounded-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-medium">{example.question}</h3>
+                    <button
+                      onClick={() => removeEmailExample(example.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Ta bort
+                    </button>
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{example.answer}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Example Questions Tab */}
+        {activeTab === 'examples' && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Exempelfrågor</h2>
+            
+            {/* Add new example question form */}
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <h3 className="text-lg font-medium mb-3">Lägg till ny exempelfråga</h3>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Etikett</label>
+                <input
+                  type="text"
+                  value={newExampleQuestion.label}
+                  onChange={(e) => setNewExampleQuestion({...newExampleQuestion, label: e.target.value})}
+                  className="w-full p-2 border rounded-md"
+                  placeholder="Ange etikett"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Text</label>
+                <textarea
+                  value={newExampleQuestion.text}
+                  onChange={(e) => setNewExampleQuestion({...newExampleQuestion, text: e.target.value})}
+                  className="w-full p-2 border rounded-md h-32"
+                  placeholder="Ange text"
+                />
+              </div>
+              <button
+                onClick={addExampleQuestion}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Lägg till
+              </button>
+            </div>
+            
+            {/* List of example questions */}
+            <div className="space-y-4">
+              {exampleQuestions.map((example) => (
+                <div key={example.id} className="p-4 border rounded-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-medium">{example.label}</h3>
+                    <button
+                      onClick={() => removeExampleQuestion(example.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Ta bort
+                    </button>
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{example.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

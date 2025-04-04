@@ -13,10 +13,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted');
     setError(null);
     setLoading(true);
 
     try {
+      console.log('Sending request to /api/auth');
       const response = await fetch('/api/auth', {
         method: 'PUT',
         headers: {
@@ -28,7 +30,9 @@ export default function LoginPage() {
         }),
       });
 
+      console.log('Got response:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to log in');
