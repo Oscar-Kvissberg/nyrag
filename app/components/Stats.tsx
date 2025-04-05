@@ -154,8 +154,7 @@ export default function Stats() {
     };
 
     return (
-        <div className="container mx-auto px-4 py-16 pt-24">
-            <h1 className="text-3xl font-bold mb-8">Statistik</h1>
+        <div className="container mx-auto px-4">
             
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow">
@@ -164,7 +163,7 @@ export default function Stats() {
                 </div>
                 
                 <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-700">Totala tokens</h3>
+                    <h3 className="text-lg font-semibold text-gray-700">Använda tokens</h3>
                     <p className="text-3xl font-bold text-green-600">{totalTokens}</p>
                 </div>
                 

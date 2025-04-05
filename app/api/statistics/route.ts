@@ -31,6 +31,17 @@ export async function GET(req: Request) {
         total_tokens_used = EXCLUDED.total_tokens_used
     `;
 
+    // Update the tokens_used field in the users table for this club
+    await sql`
+      UPDATE users
+      SET tokens_used = (
+        SELECT COALESCE(SUM(total_tokens_used), 0)
+        FROM daily_statistics
+        WHERE club_id = ${clubId}
+      )
+      WHERE club_id = ${clubId}
+    `;
+
     // Get daily statistics
     const dailyStats = await sql`
       SELECT 
@@ -91,6 +102,17 @@ export async function POST(req: Request) {
       DO UPDATE SET
         total_interactions = EXCLUDED.total_interactions,
         total_tokens_used = EXCLUDED.total_tokens_used
+    `;
+
+    // Update the tokens_used field in the users table for this club
+    await sql`
+      UPDATE users
+      SET tokens_used = (
+        SELECT COALESCE(SUM(total_tokens_used), 0)
+        FROM daily_statistics
+        WHERE club_id = ${clubId}
+      )
+      WHERE club_id = ${clubId}
     `;
 
     return NextResponse.json({ success: true });
