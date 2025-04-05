@@ -112,7 +112,7 @@ export default function TopAdmin() {
       
       <div>
         <h2 className="text-xl font-semibold mb-4">Användarhantering</h2>
-        <TestComponent onLogout={handleLogout} />
+        <TestComponent />
       </div>
     </div>
   );

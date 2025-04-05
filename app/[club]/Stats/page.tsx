@@ -6,7 +6,7 @@ type Props = {
 }
 
 export default async function StatsPage({ params }: Props) {
-  const { club } = await params
+  await params
   
   return (
     <div className="container mx-auto px-4 py-24">

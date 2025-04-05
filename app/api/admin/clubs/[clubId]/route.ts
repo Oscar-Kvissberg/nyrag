@@ -1,20 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: { clubId: string } }
-) {
+export async function DELETE(request: NextRequest) {
   try {
-    // No authentication check needed for this simple implementation
-    const { clubId } = params;
+    const clubId = request.nextUrl.pathname.split('/').pop();
     const sql = await getSql();
-
-    // Delete the club
+    
+    // Delete club
     await sql`
-      DELETE FROM users
+      DELETE FROM clubs
       WHERE id = ${clubId}
-      AND role = 'club'
     `;
 
     return NextResponse.json({ success: true });

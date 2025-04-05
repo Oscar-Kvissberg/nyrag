@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     
     try {
       await jwtVerify(token, secret);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }

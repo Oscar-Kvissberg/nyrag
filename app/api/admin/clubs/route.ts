@@ -3,7 +3,7 @@ import { getSql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 
 // Get all clubs
-export async function GET(req: Request) {
+export async function GET() {
   try {
     // No authentication check needed for this simple implementation
     const sql = await getSql();

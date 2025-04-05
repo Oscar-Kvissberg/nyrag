@@ -1,17 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest) {
   try {
+    const userId = request.nextUrl.pathname.split('/').pop();
     const sql = await getSql();
     
     // Delete user
     await sql`
       DELETE FROM users
-      WHERE id = ${params.id}
+      WHERE id = ${userId}
     `;
 
     return NextResponse.json({ success: true });
