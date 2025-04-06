@@ -32,6 +32,12 @@ export async function POST(req: Request) {
     const examples = await req.json();
     const sql = await getSql();
 
+    // First, delete all existing example questions for this club
+    await sql`
+      DELETE FROM example_questions
+      WHERE club_id = ${clubId}
+    `;
+
     // Insert all example questions
     for (const { label, text } of examples) {
       if (!label || !text) {

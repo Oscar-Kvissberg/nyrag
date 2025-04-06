@@ -29,28 +29,41 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const { clubId } = await verifyAuth(req);
-    const { question, answer } = await req.json();
+    const examples = await req.json();
     const sql = await getSql();
 
+    // First, delete all existing QA examples for this club
     await sql`
-      INSERT INTO qa_examples (
-        club_id,
-        question,
-        answer,
-        created_at
-      ) VALUES (
-        ${clubId},
-        ${question},
-        ${answer},
-        CURRENT_TIMESTAMP
-      )
+      DELETE FROM qa_examples
+      WHERE club_id = ${clubId}
     `;
+
+    // Insert all examples
+    for (const { question, answer } of examples) {
+      if (!question || !answer) {
+        throw new Error('Question and answer are required for each example');
+      }
+      
+      await sql`
+        INSERT INTO qa_examples (
+          club_id,
+          question,
+          answer,
+          created_at
+        ) VALUES (
+          ${clubId},
+          ${question},
+          ${answer},
+          CURRENT_TIMESTAMP
+        )
+      `;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error creating Q&A example:', error);
+    console.error('Error creating Q&A examples:', error);
     return NextResponse.json(
-      { error: 'Failed to create Q&A example' },
+      { error: error instanceof Error ? error.message : 'Failed to create Q&A examples' },
       { status: 500 }
     );
   }

@@ -146,6 +146,18 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
       if (refreshData.documents) {
         setDocuments(refreshData.documents);
       }
+
+      // Sync to search index
+      const syncResponse = await fetch('/api/sync-search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+
+      if (!syncResponse.ok) {
+        console.error('Failed to sync documents to search index');
+      }
     } catch (err) {
       setSaveStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to save documents');
@@ -187,6 +199,18 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
       if (refreshData.examples) {
         setEmailExamples(refreshData.examples);
       }
+
+      // Sync to search index
+      const syncResponse = await fetch('/api/sync-search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+
+      if (!syncResponse.ok) {
+        console.error('Failed to sync email examples to search index');
+      }
     } catch (err) {
       setSaveStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to save email examples');
@@ -201,7 +225,7 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
       setSaveStatus('saving');
       
       // Prepare data without IDs
-      const examplesWithoutIds = exampleQuestions.map(({ label, text }) => ({ label, text }));
+      const questionsWithoutIds = exampleQuestions.map(({ label, text }) => ({ label, text }));
       
       const response = await fetch(`/api/example-questions?clubId=${user.clubId}`, {
         method: 'POST',
@@ -209,7 +233,7 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${Cookies.get('token')}`
         },
-        body: JSON.stringify(examplesWithoutIds),
+        body: JSON.stringify(questionsWithoutIds),
       });
 
       if (!response.ok) {
@@ -225,8 +249,20 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
         }
       });
       const refreshData = await refreshResponse.json();
-      if (refreshData.examples) {
-        setExampleQuestions(refreshData.examples);
+      if (refreshData.questions) {
+        setExampleQuestions(refreshData.questions);
+      }
+
+      // Sync to search index
+      const syncResponse = await fetch('/api/sync-search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+
+      if (!syncResponse.ok) {
+        console.error('Failed to sync example questions to search index');
       }
     } catch (err) {
       setSaveStatus('error');
