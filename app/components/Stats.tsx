@@ -158,13 +158,13 @@ export default function Stats() {
             
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-700">Totala interaktioner</h3>
-                    <p className="text-3xl font-bold text-blue-600">{totalInteractions}</p>
+                    <h3 className="text-lg font-semibold text-gray-700">Totala interaktioner (genererade svar)</h3>
+                    <p className="text-3xl font-bold text-purple-600">{totalInteractions}</p>
                 </div>
                 
                 <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-700">Använda tokens</h3>
-                    <p className="text-3xl font-bold text-green-600">{totalTokens}</p>
+                    <h3 className="text-lg font-semibold text-gray-700">Totalt Använda tokens</h3>
+                    <p className="text-3xl font-bold text-purple-600">{totalTokens}</p>
                 </div>
                 
                 <div className="bg-white p-6 rounded-lg shadow">
