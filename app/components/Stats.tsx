@@ -105,7 +105,7 @@ export default function Stats() {
 
     const totalInteractions = stats.reduce((sum, day) => sum + day.total_interactions, 0);
     const totalTokens = stats.reduce((sum, day) => sum + day.total_tokens, 0);
-    const avgResponseTime = 2.5; // Placeholder
+   
 
     if (isLoading) {
         return (
@@ -168,8 +168,8 @@ export default function Stats() {
                 </div>
                 
                 <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-700">Genomsnittlig svarstid</h3>
-                    <p className="text-3xl font-bold text-purple-600">{avgResponseTime}s</p>
+                    <h3 className="text-lg font-semibold text-gray-700">Estimerad sparad tid (5 minuter per interaktion)</h3>
+                    <p className="text-3xl font-bold text-purple-600">{totalInteractions * 5} minuter</p>
                 </div>
             </div>
 
