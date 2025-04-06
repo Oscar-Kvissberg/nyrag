@@ -14,9 +14,38 @@ interface User {
     role: string;
 }
 
+interface ResponseMetadata {
+    documentsUsed: DocumentMetadata[];
+    examplesUsed: ExampleMetadata[];
+    responseTime: number;
+    tokensUsed: number;
+    category: string;
+}
+
+interface DocumentMetadata {
+    title: string;
+    content: string;
+}
+
+interface ExampleMetadata {
+    question: string;
+    answer: string;
+}
+
 export default function OpenAIBot() {
-    const [message, setMessage] = useState('');
-    const [response, setResponse] = useState('');
+    const [message, setMessage] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('savedMessage') || '';
+        }
+        return '';
+    });
+    const [response, setResponse] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('savedResponse') || '';
+        }
+        return '';
+    });
+    const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
@@ -78,6 +107,9 @@ export default function OpenAIBot() {
 
     const handleClearMessage = () => {
         setMessage('');
+        localStorage.removeItem('savedMessage');
+        localStorage.removeItem('savedResponse');
+        setResponse('');
         if (selectRef.current) {
             selectRef.current.value = '';
         }
@@ -102,7 +134,9 @@ export default function OpenAIBot() {
     };
 
     const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setMessage(e.target.value);
+        const newMessage = e.target.value;
+        setMessage(newMessage);
+        localStorage.setItem('savedMessage', newMessage);
     };
 
     useEffect(() => {
@@ -115,6 +149,7 @@ export default function OpenAIBot() {
 
         setError(null);
         setIsLoading(true);
+        setMetadata(null);
 
         try {
             const token = Cookies.get('token');
@@ -144,6 +179,8 @@ export default function OpenAIBot() {
             }
 
             setResponse(data.response);
+            setMetadata(data.metadata);
+            localStorage.setItem('savedResponse', data.response);
 
         } catch (err) {
             console.error('Error details:', err);
@@ -287,6 +324,44 @@ export default function OpenAIBot() {
                             placeholder={isLoading ? "Söker i kunskapsbasen..." : "Assistentens svar kommer att visas här..."}
                             style={{ resize: 'none', overflow: 'hidden', height: textareaHeight }}
                         />
+                        
+                        {metadata && (
+                            <div className="mt-6 space-y-4">
+                                <div className="text-sm text-gray-600">
+                                    <p>Svarstid: {metadata.responseTime}ms</p>
+                                    <p>Tokens använda: {metadata.tokensUsed}</p>
+                                    <p>Kategori: {metadata.category}</p>
+                                </div>
+                                
+                                {metadata.documentsUsed.length > 0 && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2">Använda dokument:</h3>
+                                        <ul className="space-y-2">
+                                            {metadata.documentsUsed.map((doc, index) => (
+                                                <li key={index} className="text-sm text-gray-600">
+                                                    <p className="font-medium">{doc.title}</p>
+                                                    <p className="text-gray-500">{doc.content}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                
+                                {metadata.examplesUsed.length > 0 && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2">Använda exempel:</h3>
+                                        <ul className="space-y-2">
+                                            {metadata.examplesUsed.map((example, index) => (
+                                                <li key={index} className="text-sm text-gray-600">
+                                                    <p className="font-medium">Fråga: {example.question}</p>
+                                                    <p className="text-gray-500">Svar: {example.answer}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

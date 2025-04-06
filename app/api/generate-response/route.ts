@@ -200,7 +200,7 @@ Var tydlig och konkret i ditt svar.`;
           category
         ) VALUES (
           ${clubId},
-          'chat',
+          'question',
           ${message},
           ${response},
           ${responseTime},
@@ -210,7 +210,33 @@ Var tydlig och konkret i ditt svar.`;
       `;
       console.log('Interaction logged to database');
 
-      return NextResponse.json({ response });
+      // Log metadata to terminal
+      console.log('\n=== RESPONSE METADATA ===');
+      console.log(`Response time: ${responseTime}ms`);
+      console.log(`Tokens used: ${tokensUsed}`);
+      console.log(`Category: ${category}`);
+      
+      if (relevantDocuments.length > 0) {
+        console.log('\n=== DOCUMENTS USED ===');
+        relevantDocuments.forEach((doc, index) => {
+          console.log(`\nDocument ${index + 1}: ${doc.title}`);
+          console.log(`Content preview: ${doc.content.substring(0, 100)}...`);
+        });
+      }
+      
+      if (relevantQAExamples.length > 0) {
+        console.log('\n=== QA EXAMPLES USED ===');
+        relevantQAExamples.forEach((qa, index) => {
+          console.log(`\nExample ${index + 1}:`);
+          console.log(`Question: ${qa.question}`);
+          console.log(`Answer preview: ${qa.answer.substring(0, 100)}...`);
+        });
+      }
+      console.log('\n========================\n');
+
+      return NextResponse.json({
+        response
+      });
     } catch (openaiError) {
       console.error('OpenAI API error:', openaiError);
       return NextResponse.json(
