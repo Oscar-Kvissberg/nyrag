@@ -13,6 +13,7 @@ export async function GET(req: Request) {
       WHERE club_id = ${clubId}
       ORDER BY created_at DESC
     `;
+    
 
     return NextResponse.json(examples);
   } catch (error) {
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
     );
   }
 }
+
 
 // Create a new QA example
 export async function POST(req: Request) {

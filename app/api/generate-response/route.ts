@@ -101,8 +101,12 @@ export async function POST(req: Request) {
     }
     console.log('Relevant QA examples found:', relevantQAExamples.length);
 
-    // Construct a more structured prompt
-    const prompt = `Du är en kansli assistent för ${config.config?.club_name || 'golfklubben'}. 
+    // Get club's custom prompt
+    const promptResult = await sql`
+      SELECT prompt FROM club_prompts WHERE club_id = ${clubId}
+    `;
+    
+    let customPrompt = `Du är en kansli assistent för ${config.config?.club_name || 'golfklubben'}. 
 Använd följande information för att svara på frågan:
 
 KLUBBENS KONTEXT:
@@ -130,13 +134,29 @@ Om du inte hittar relevant information i dokumenten eller exemplen,
 använd klubbens kontext och regler för att ge ett generellt svar. 
 Var tydlig och konkret i ditt svar.`;
 
-    console.log('Prompt constructed, length:', prompt.length);
+    // If club has a custom prompt, use it instead
+    if (promptResult.length > 0) {
+      customPrompt = promptResult[0].prompt
+        .replace('{clubContext}', clubContext)
+        .replace('{clubRules}', clubRules)
+        .replace('{relevantDocuments}', relevantDocuments.map(doc => `
+Titel: ${doc.title}
+Innehåll: ${doc.content}
+---`).join('\n'))
+        .replace('{relevantQAExamples}', relevantQAExamples.map(qa => `
+Fråga: ${qa.question}
+Svar: ${qa.answer}
+---`).join('\n'))
+        .replace('{message}', message);
+    }
+
+    console.log('Prompt constructed, length:', customPrompt.length);
 
     try {
       // Generate response using OpenAI
       console.log('Calling OpenAI API...');
       const completion = await openai.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: customPrompt }],
         model: "gpt-3.5-turbo",
         temperature: 0.7,
         max_tokens: 1000

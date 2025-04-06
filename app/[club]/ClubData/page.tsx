@@ -29,14 +29,41 @@ interface User {
   role: string;
 }
 
+interface ClubPrompt {
+  id?: number;
+  prompt: string;
+}
+
 export default function ClubDataPage({ params }: { params: Promise<{ club: string }> }) {
   const resolvedParams = use(params);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [emailExamples, setEmailExamples] = useState<EmailExample[]>([]);
   const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([]);
+  const [clubPrompt, setClubPrompt] = useState<ClubPrompt>({
+    prompt: `Du är en kansli assistent för {clubName}. 
+Använd följande information för att svara på frågan:
+
+KLUBBENS KONTEXT:
+{clubContext}
+
+KLUBBENS REGLER:
+{clubRules}
+
+RELEVANTA DOKUMENT:
+{relevantDocuments}
+
+RELEVANTA EXEMPEL PÅ FRÅGOR OCH SVAR:
+{qaExamples}
+
+FRÅGA: {message}
+
+Svara på frågan baserat på den tillgängliga informationen.
+Om du inte hittar relevant information i dokumenten eller exemplen,
+använd klubbens kontext och regler för att ge ett generellt svar.`
+  });
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const [activeTab, setActiveTab] = useState<'documents' | 'emails' | 'examples'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'emails' | 'examples' | 'prompt'>('documents');
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -77,33 +104,32 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
           return;
         }
 
-        const [documentsRes, emailsRes, examplesRes] = await Promise.all([
+        const [documentsRes, emailsRes, examplesRes, promptRes] = await Promise.all([
           fetch(`/api/documents?clubId=${user.clubId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           }),
           fetch(`/api/qa?clubId=${user.clubId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           }),
           fetch(`/api/example-questions?clubId=${user.clubId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch(`/api/club-prompt?clubId=${user.clubId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
           })
         ]);
 
-        const [documentsData, emailsData, examplesData] = await Promise.all([
+        const [documentsData, emailsData, examplesData, promptData] = await Promise.all([
           documentsRes.json(),
           emailsRes.json(),
-          examplesRes.json()
+          examplesRes.json(),
+          promptRes.json()
         ]);
 
         if (documentsData.documents) setDocuments(documentsData.documents);
         if (emailsData.examples) setEmailExamples(emailsData.examples);
         if (examplesData.examples) setExampleQuestions(examplesData.examples);
+        if (promptData.prompt) setClubPrompt({ prompt: promptData.prompt });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch data');
       }
@@ -271,6 +297,43 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
     }
   };
 
+  const handleSavePrompt = async () => {
+    if (!user?.clubId) return;
+
+    try {
+      setSaveStatus('saving');
+      
+      const response = await fetch(`/api/club-prompt?clubId=${user.clubId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        },
+        body: JSON.stringify({ prompt: clubPrompt.prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save prompt');
+      }
+
+      setSaveStatus('success');
+      
+      // Refresh the data
+      const refreshResponse = await fetch(`/api/club-prompt?clubId=${user.clubId}`, {
+        headers: {
+          'Authorization': `Bearer ${Cookies.get('token')}`
+        }
+      });
+      const refreshData = await refreshResponse.json();
+      if (refreshData.prompt) {
+        setClubPrompt({ prompt: refreshData.prompt });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save prompt');
+      setSaveStatus('error');
+    }
+  };
+
   const addDocument = () => {
     if (newDocument.title && newDocument.content) {
       setDocuments([...documents, { id: Date.now(), ...newDocument }]);
@@ -332,7 +395,8 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
                 onClick={
                   activeTab === 'documents' ? handleSaveDocuments :
                   activeTab === 'emails' ? handleSaveEmailExamples :
-                  handleSaveExampleQuestions
+                  activeTab === 'examples' ? handleSaveExampleQuestions :
+                  handleSavePrompt
                 }
                 disabled={saveStatus === 'saving'}
                 className={`px-4 py-2 rounded-lg font-semibold ${
@@ -377,6 +441,16 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
               }`}
             >
               Exempelfrågor
+            </button>
+            <button
+              onClick={() => setActiveTab('prompt')}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                activeTab === 'prompt'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Anpassa Prompt
             </button>
           </div>
 
@@ -542,6 +616,24 @@ export default function ClubDataPage({ params }: { params: Promise<{ club: strin
                       <p className="text-gray-700 whitespace-pre-wrap">{example.text}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Prompt Tab */}
+            {activeTab === 'prompt' && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Anpassa Prompt</h2>
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Här kan du anpassa prompten som används för att generera svar. 
+                    Använd variabler som {'{clubContext}'} och {'{clubRules}'} för att inkludera klubbens kontext och regler.
+                  </p>
+                  <textarea
+                    value={clubPrompt.prompt}
+                    onChange={(e) => setClubPrompt({...clubPrompt, prompt: e.target.value})}
+                    className="w-full p-4 border rounded-lg h-[700px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
                 </div>
               </div>
             )}

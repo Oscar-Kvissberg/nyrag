@@ -194,6 +194,32 @@ export async function ensureTables() {
       console.log('Example questions table already exists');
     }
 
+    // Check if club_prompts table exists and create it if it doesn't
+    const clubPromptsTableExists = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'club_prompts'
+      )
+    `;
+    
+    if (!clubPromptsTableExists[0].exists) {
+      await sql`
+        CREATE TABLE club_prompts (
+          id SERIAL PRIMARY KEY,
+          club_id VARCHAR(100) NOT NULL UNIQUE,
+          prompt TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+      console.log('Club prompts table created');
+      
+      // Create index for faster lookups
+      await sql`CREATE INDEX IF NOT EXISTS idx_club_prompts_club_id ON club_prompts(club_id)`;
+    } else {
+      console.log('Club prompts table already exists');
+    }
+
     // Create indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_users_club_id ON users(club_id)`;
@@ -202,6 +228,7 @@ export async function ensureTables() {
     await sql`CREATE INDEX IF NOT EXISTS idx_documents_club_id ON documents(club_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_qa_examples_club_id ON qa_examples(club_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_example_questions_club_id ON example_questions(club_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_club_prompts_club_id ON club_prompts(club_id)`;
     console.log('All indexes created');
 
     console.log('Database tables and indexes created successfully');
