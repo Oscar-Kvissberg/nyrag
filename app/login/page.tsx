@@ -202,12 +202,12 @@ export default function LoginPage() {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Oscar eller Johan</h3>
-                  <p className="text-gray-600">E-post: Johan@majl.se</p>
-                  <p className="text-gray-600">Telefon: 08-123455</p>
+                  <p className="text-gray-600">E-post: xxxx@mejl.se</p>
+                  <p className="text-gray-600">Telefon: xxxxxxx</p>
                 </div>
                 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">För programutveckling</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">För utveckling av Applikationen</h3>
                   <p className="text-gray-600">Catalina Software Solutions AB</p>
                   <p className="text-gray-600">oscar.kvissberg@catalinasoftwaresolutions.se</p>
                   <p className="text-gray-600">anton.bjorkegren@catalinasoftwaresolutions.se</p>
